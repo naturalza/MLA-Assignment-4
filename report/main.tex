@@ -4,6 +4,9 @@
 \usepackage[caption=false,font=footnotesize]{subfig}
 \usepackage{float}
 \usepackage{flafter}
+\setcounter{dbltopnumber}{2}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\dblfloatpagefraction}{0.8}
 \usepackage[draft,hidelinks]{hyperref}
 
 \title{Self-Organising Maps for Network Intrusion Categorisation}
@@ -17,16 +20,15 @@ Department of Computer Science, Stellenbosch University}}
 
 \begin{abstract}
 Network intrusion detection requires a classifier that recognises rare attack categories as well as benign traffic.
-The present study trained a self-organising map (SOM) on the UNSW-NB15 data set with the category label withheld and attached the label only after training.
-A validation portion selected the input representation, the lattice size, the training settings and the labelling rule.
-The selected map was then compared with the nearest-neighbour classifier and the classification tree of Assignment 2 under stratified five-fold cross-validation.
-The SOM required a logarithmic transform and standardisation of the numeric inputs.
-The validation macro F-measure reached a plateau at roughly 576 units, while the quantisation error continued to fall.
-Clustering of the codebook by the method of Ward lowered the macro F-measure at every number of clusters.
-An inverse-frequency vote raised the recall of Worms, the rarest category, to 0.737.
-However, the precision of the vote on Worms was only 0.014.
-The selected SOM attained a macro F-measure of 0.4135, against 0.4525 for nearest neighbours and 0.5772 for the tree.
-The class-weighted tree therefore remained the strongest model.
+The present study trains a self-organising map (SOM) on the UNSW-NB15 data set without the category label and attaches the label to the trained map.
+The input representation, the lattice size, the training settings and the labelling rule are selected on a validation portion.
+The selected map is compared with the nearest-neighbour classifier and the classification tree of Assignment 2 under stratified five-fold cross-validation.
+The SOM requires a logarithmic transform and standardisation of the numeric inputs.
+The validation macro F-measure shows a plateau from roughly 576 units, while the quantisation error continues to decrease.
+Clustering of the codebook lowers the macro F-measure at every number of clusters.
+An inverse-frequency vote detects most rows of the rarest category, although with a very low precision.
+The SOM attains a macro F-measure of 0.4135, compared with 0.4525 for nearest neighbours and 0.5772 for the tree.
+The class-weighted tree therefore remains the best model under the macro F-measure.
 \end{abstract}
 
 \let\thefootnote\relax
@@ -37,7 +39,7 @@ self-organising map, vector quantisation, network intrusion detection, class imb
 \end{IEEEkeywords}
 
 \section{Introduction}
-A network intrusion detector assigns each traffic record to either benign traffic or one of several families of attack.
+A network intrusion detector assigns each traffic record to either benign traffic or one of nine families of attack.
 In the UNSW-NB15 data set of Moustafa and Slay \cite{moustafa2015}, the benign category accounts for more than half of the records after duplicate removal.
 The rarest attack family accounts for about one record in a thousand.
 Consequently, a score that counts correct records rewards a detector that ignores the rare families \cite{he2009}.
@@ -47,15 +49,20 @@ A self-organising map (SOM) offers an unsupervised route to the same task.
 Kohonen placed the units of a SOM on a lattice and assigned each unit a codebook vector in the input space \cite{kohonen1990}.
 Training moves the codebook vectors towards the data without reference to the category label.
 Similar records therefore select neighbouring units, and the label is attached to the units only after training.
-A new record then receives the category attached to the closest unit.
-Kayacik \emph{et al.} and Ramadas \emph{et al.} showed that SOMs separate several forms of network traffic without supervision \cite{kayacik2007,ramadas2003}.
+A new record receives the category attached to the closest unit.
+Kayacik \emph{et al.} and Ramadas \emph{et al.} showed that SOMs separate normal and anomalous network traffic without supervision \cite{kayacik2007,ramadas2003}.
 
 The study compares a tuned SOM with the two classifiers of Assignment 2, namely a nearest-neighbour classifier and a classification tree.
 Four research questions direct the study.
-The first question asks for the smallest lattice that reaches the plateau of the validation macro F-measure.
+The first question asks for the smallest lattice on the plateau of the validation macro F-measure.
 The second question asks whether clustering of the codebook vectors yields better category labels than the majority category of each unit.
-The third question asks whether a change that keeps the label out of training reduces the dominance of the largest category.
+The third question asks whether a class cap during training or a weighted vote after training reduces the dominance of the largest category.
 The fourth question asks how the selected SOM compares with the two classifiers of Assignment 2 on identical cross-validation folds.
+
+The main conclusion of the study is that the SOM does not match the class-weighted tree under the macro F-measure.
+The SOM requires a logarithm and standardisation of the numeric inputs, and the validation score shows a plateau from roughly 576 units.
+Clustering of the codebook lowers the score, because each of the three largest categories occupies more than one region of the map.
+An inverse-frequency vote detects most rows of the rarest category, but the precision of the vote on that category is very low.
 
 The remainder of the report is organised as follows.
 Section~\ref{sec:background} presents the SOM and the rules that attach labels to the SOM.
@@ -69,7 +76,7 @@ Section~\ref{sec:conclusions} concludes the report.
 \label{sec:background}
 The purpose of the present section is to define every model and measure used in the study.
 The section first defines vector quantisation and the SOM.
-The section then defines the labelling of the codebook vectors, the reference classifiers, and the performance measures.
+The section also defines the labelling of the codebook vectors, the reference classifiers, and the performance measures.
 The section closes with the properties of the data set and the expectations that follow from those properties.
 
 \subsection{Vector quantisation}
@@ -110,12 +117,12 @@ The width and the learning rate decay as
 \label{eq:decay}
 \end{equation}
 with a time constant $\tau$ shared by both decays.
-Repeated presentation pulls codebook vectors into dense regions of the input space.
+Repeated presentation moves codebook vectors into dense regions of the input space.
 As a result, a region with few patterns receives few codebook vectors \cite{kohonen2001}.
 
 Engelbrecht separated training into an ordering phase and a convergence phase \cite{engelbrecht2007}.
-The ordering phase starts with a width that spans the lattice and a high learning rate, so that the lattice unfolds over the data.
-The convergence phase uses a narrow width and settles the codebook vectors.
+The ordering phase starts with a width that spans the lattice and a high learning rate, so that the lattice spreads over the data.
+The convergence phase uses a narrow width and fine-tunes the codebook vectors.
 Kohonen proposed the batch map for convergence \cite{kohonen2001}.
 Let $n_v$ denote the number of training patterns won by unit $v$, and let $\bar{\mathbf{z}}_v$ denote the mean of those patterns.
 The batch map replaces every codebook vector by the kernel-weighted mean
@@ -129,7 +136,7 @@ Two measures describe a trained map.
 The quantisation error in \eqref{eq:qe} measures the fit to the data.
 Kiviluoto defined the topographic error as the fraction of patterns whose best and second-best units are not adjacent on the lattice \cite{kiviluoto1996}.
 Let $b'(p)$ denote the second-best unit of pattern $p$, and let $\delta_p$ equal one when $b(p)$ and $b'(p)$ are not orthogonal neighbours and zero otherwise.
-The topographic error is then
+The topographic error is
 \begin{equation}
 T=\frac{1}{P}\sum_{p=1}^{P}\delta_p.
 \label{eq:te}
@@ -141,7 +148,7 @@ Large distances in the unified distance matrix mark boundaries between groups of
 Engelbrecht noted that a lattice with too few units forces unrelated patterns onto the same unit \cite{engelbrecht2007}.
 Conversely, a lattice with as many units as patterns assigns a separate unit to each pattern and stops summarising the data.
 The useful lattice size is therefore the smallest size where further units stop improving the category score.
-The value of $Q$ always falls as units are added, so $Q$ cannot identify that size.
+The value of $Q$ always decreases as units are added, so $Q$ cannot identify that size.
 When the score still improves at the largest lattice of a sweep, Engelbrecht grew the map instead \cite{engelbrecht2007}.
 The growing map inserts a row and a column next to the unit with the largest quantisation error.
 The insertion lies between that unit and the adjacent unit with the most distant codebook vector.
@@ -155,7 +162,7 @@ The second rule clusters the codebook vectors and assigns every unit in a cluste
 The third rule combines the histograms of neighbouring units in a weighted vote at prediction time.
 
 The second rule uses the hierarchical criterion of Ward \cite{ward1963}.
-Ward merged, at each step, the two clusters whose union produces the smallest increase in the within-cluster sum of squared errors.
+At each step, Ward merged the two clusters whose union produces the smallest increase in the within-cluster sum of squared errors.
 For clusters $A$ and $B$, the increase is
 \begin{equation}
 d_{AB}=\frac{n_A n_B}{n_A+n_B}\lVert\boldsymbol{\mu}_A-\boldsymbol{\mu}_B\rVert_2^2,
@@ -176,7 +183,8 @@ The weight of category $c$ is
 \label{eq:weight}
 \end{equation}
 A query first finds the best-matching unit $v$.
-The vote for category $c$ then sums, over every unit $u$ within three widths of $v$, the histogram count of $c$ at $u$ multiplied by $\phi_{vu}$ and by $\alpha_c$.
+The vote for category $c$ is the sum of the histogram counts of $c$ over every unit $u$ within three widths of $v$.
+Each count is multiplied by $\phi_{vu}$ and by $\alpha_c$.
 The weight raises the influence of a rare category, as He and Garcia recommended for imbalanced data \cite{he2009}.
 
 Two conventions keep every prediction defined.
@@ -192,6 +200,8 @@ Hastie \emph{et al.} noted that the contribution of an input to the Euclidean di
 Inputs with wide ranges therefore dominate the vote unless the inputs are rescaled.
 In Assignment 2, a grid search under stratified five-fold cross-validation compared values of $k$ from one to 50 with uniform and distance-weighted votes.
 The macro F-measure selected $k=7$ with a uniform vote, and distance weighting gave no improvement at any value of $k$.
+The same authors noted that a small value of $k$ follows the local structure of the data but responds strongly to noise \cite{hastie2009}.
+A large value of $k$ smooths the decision boundary, but the frequent categories dominate a large neighbourhood.
 The uniform vote gives each of the seven neighbours one vote.
 The present study adds a weighted vote that gives a neighbour of category $c$ the weight $\alpha_c$ from \eqref{eq:weight}.
 Both votes use the same seven neighbours, so the weight is the only difference.
@@ -207,9 +217,13 @@ The tree selects the threshold that maximises the decrease $G-(\omega_L G_L+\ome
 Here, $\omega$ is the total pattern weight at the node.
 The symbols $\omega_L$ and $G_L$ denote the weight and the Gini index of the left child, and $\omega_R$ and $G_R$ denote those of the right child.
 A threshold on one input is unaffected by a monotone rescaling of that input, so the tree needs neither a logarithm nor standardisation.
+Breiman \emph{et al.} controlled the size of a tree to prevent the tree from fitting individual training patterns \cite{breiman1984}.
+In the present study, the maximum depth serves that purpose.
+The minimum leaf size sets how few patterns a leaf may describe, and a small minimum allows a leaf that isolates a rare category.
+Class weighting raises the contribution of the rare categories to the Gini index.
 In Assignment 2, the grid compared the Gini index and entropy at depths from five to 25 and without a limit, followed by leaf sizes and class weighting.
 The macro F-measure selected the Gini index, a maximum depth of 15, a minimum of one pattern per leaf, and class weighting.
-Each training pattern carries the weight $\alpha_c$ of the category of the pattern.
+Each training pattern of category $c$ carries the weight $\alpha_c$.
 
 \subsection{Performance measures}
 Sokolova and Lapalme showed that accuracy favours the majority category when the categories are imbalanced \cite{sokolova2009}.
@@ -241,24 +255,37 @@ A distance that includes the identifier therefore separates every training row a
 The binary flag is a coarser copy of the category label and would leak the target into the inputs.
 Both columns are removed before any other step.
 Exact duplicate rows remain after the identifier is removed.
-A duplicate places the same observation in both a training partition and an evaluation partition, and the score then rewards memorisation.
+A duplicate places the same observation in both a training partition and an evaluation partition, and the score rewards memorisation.
+For the SOM and the nearest-neighbour vote, the evaluation copy lies at distance zero from the training copy.
+For the tree, the evaluation copy reaches the leaf fitted to the training copy.
 Duplicates are therefore removed before any split.
 
-The numeric inputs differ in range by many orders of magnitude.
+The ranges of the numeric inputs span nine orders of magnitude, as Assignment 2 reported.
 Under Euclidean distance, the widest input decides the best-matching unit.
-Standardisation equalises the ranges.
-A logarithm additionally compresses a right-skewed, non-negative input before standardisation.
-A codebook vector stores a mean, and a logarithm changes that mean, so the study tests whether the logarithm is necessary for the SOM.
+Standardisation subtracts the training mean of each numeric input and divides the result by the training standard deviation of that input.
+Standardisation equalises the scales of the inputs and does not assume a normal distribution.
+However, extreme values of a right-skewed input dominate the standard deviation of that input.
+In Assignment 2, 14 of the 39 numeric inputs had more than five per cent of the values beyond three interquartile ranges from the quartiles.
+The natural logarithm of one plus the value compresses a right-skewed, non-negative input and maps a zero value to zero.
+The logarithm is therefore applied before standardisation.
+A logarithm changes the mean that a codebook vector stores.
+The study therefore tests whether the logarithm is necessary for the SOM.
 
 Normal traffic accounts for 85\,722 of the 162\,745 deduplicated rows, a share of 52.67 per cent.
 Worms is the smallest category, with 171 rows.
 A SOM that follows the density of the data assigns most units to the largest category.
-A rare category then shares units with frequent categories and loses the majority vote on those units.
-The expected SOM therefore shows a reasonable accuracy and a weak macro F-measure.
-The expected macro F-measure lies near that of the uniform nearest-neighbour vote and below that of the weighted tree.
-Two remedies keep the label out of training.
+As a result, a rare category shares units with frequent categories and loses the majority vote on those units.
+The SOM is therefore expected to show a reasonable accuracy and a weak macro F-measure.
+The macro F-measure of the SOM is expected to lie near that of the uniform nearest-neighbour vote and below that of the weighted tree.
+Two remedies leave the training of the SOM unsupervised.
 The first remedy is the inverse-frequency vote.
 The second remedy caps the number of training patterns per category during training.
+
+The imbalance affects the reference classifiers in the same way.
+A neighbourhood drawn from a region dominated by a frequent category rarely contains enough rare patterns to win the uniform vote.
+The weighted vote is the remedy for the nearest-neighbour classifier.
+In an unweighted tree, the frequent categories dominate the Gini index, so a split that isolates a rare category yields little decrease in $G$.
+The class weight $\alpha_c$ is the remedy for the tree.
 
 Finally, identical input vectors occur with different category labels in the data set.
 No classifier restricted to the inputs can separate the rows that share such a vector.
@@ -270,8 +297,8 @@ The class imbalance of the data set leads to the expectation that the SOM will f
 \section{Implementation}
 \label{sec:implementation}
 The present section describes how the models were implemented.
-The section covers the training procedure of the SOM, the labelling procedure, and the reference classifiers.
-All models were written in Python with NumPy and Numba.
+The section presents the training procedure of the SOM, the labelling procedure, and the reference classifiers.
+All models were written in Python with the NumPy library \cite{harris2020} and the Numba compiler \cite{lam2015}.
 No machine learning library supplied any reported model.
 
 \subsection{Training procedure}
@@ -281,9 +308,9 @@ The initial width $\sigma(0)$ is half the longer side of the lattice, so the fir
 The ordering phase lasts $E=8$ epochs.
 The time constant is $\tau=E/\ln\sigma(0)$, so the width decays to one at the first convergence epoch.
 The initial learning rate is $\eta(0)=0.5$.
-By default, the convergence phase holds the width at one, and a later selection stage tests other widths.
+By default, the convergence phase holds the width at one.
 A width of zero would reduce the weighted vote to the majority rule, so the width is kept above zero.
-Units more than three widths from the winner are not updated, because the kernel is negligible beyond that distance.
+Units more than three widths from the winner are not updated, because the kernel in \eqref{eq:kernel} is below 0.012 at that distance.
 The convergence phase stops when the relative decrease in $Q$ stays below $10^{-4}$ for five consecutive epochs, or after 25 epochs.
 
 \begin{algorithm}[tb]
@@ -306,7 +333,8 @@ The convergence phase stops when the relative decrease in $Q$ stays below $10^{-
 \end{algorithmic}
 \end{algorithm}
 
-A growing map starts from the largest lattice of the sweep and repeats the insertion described in the background.
+A growing map starts from the largest lattice of the sweep.
+Each insertion adds a row and a column next to the unit with the largest quantisation error.
 After each insertion, three ordering epochs and the convergence phase retrain the map.
 
 \subsection{Labelling procedure}
@@ -331,28 +359,34 @@ The cluster rule merges occupied units under \eqref{eq:ward} and the lattice-edg
 
 \subsection{Reference classifiers}
 The nearest-neighbour search computes squared Euclidean distances in blocks and keeps the seven nearest training patterns.
-The uniform and the weighted vote read the same list of neighbours.
+The uniform and the weighted votes read the same list of neighbours.
 At each node, the tree scans every threshold of every input and keeps the threshold with the largest weighted decrease in $G$.
 Unit tests on separable toy problems verified every model and both votes before the data set was used.
 As a further check, the scores of both reference classifiers were compared with the scores reported in Assignment 2.
 
-In summary, every model was implemented from first principles, and both reference classifiers were checked against the results of Assignment 2.
+In summary, every model was implemented from first principles, and both reference classifiers were compared with the results of Assignment 2.
 
 \section{Empirical process}
 \label{sec:empirical}
 The present section describes how the data were prepared and how the control parameters of the SOM were selected.
 The section also describes the design of the final comparison.
 Every selection rule was fixed before the corresponding score was observed.
-Control parameters were selected on a single stratified split and then frozen.
+Control parameters were selected on a single stratified split and remained fixed afterwards.
 Kohavi recommended stratified cross-validation for estimates of generalisation \cite{kohavi1995}, so the frozen models were compared under stratified five-fold cross-validation.
 
 \subsection{Data preparation}
 The official training file of 175\,341 rows and the official testing file of 82\,332 rows were combined into a single table of 257\,673 rows.
-The identifier and the binary attack flag were removed, and exact duplicate rows were then removed.
+The identifier and the binary attack flag were removed.
+Exact duplicate rows were removed after the removal of the identifier, because a unique identifier makes every row distinct.
 The table fell to 162\,745 rows, a reduction of 36.84 per cent.
 Nominal levels seen fewer than 50 times in a training partition were collapsed into a single level.
+A level with fewer than 50 rows forms less than 0.05 per cent of the training portion, so the level has almost no influence on a codebook vector or on a tree split.
+In Assignment 2, 118 of the 133 levels of the protocol input occurred fewer than 50 times, and the same threshold keeps the two studies comparable.
 The service value ``-'' denotes that no application protocol was recorded, and the value was kept as a separate level.
 The nominal inputs were one-hot encoded, giving 72 inputs in total.
+A nominal input has no order, so an integer code would impose an arbitrary distance between levels.
+One-hot encoding places every pair of distinct levels at the same distance, as the Euclidean distance of the SOM and of the nearest-neighbour vote requires.
+The tree tests numeric thresholds, and the one-hot encoding allows one threshold to isolate one level.
 
 \subsection{Partitions}
 The tuning split was stratified by category and shuffled with the seed 20261019.
@@ -363,25 +397,30 @@ Every selection used the validation portion.
 The held-out portion was never scored, so that no second opportunity to select a model arose.
 
 The generalisation comparison used a stratified five-fold partition of the full deduplicated table with the same seed.
-The folds overlap the tuning split, so the selection saw rows that later appear in the test folds.
+The folds overlapped the tuning split, so the selection saw rows that later appeared in the test folds.
 The overlap is a limitation of the design.
 However, no control parameter changed after selection, and every model was retrained from scratch on each fold.
 
 \subsection{Selection stages}
-The stages ran in a fixed order, and each stage froze the result of the previous stage.
+The stages ran in a fixed order, and each stage kept the choices of the earlier stages fixed.
 
 \emph{Input representation:}
 Three representations were compared on a lattice of $16\times16$ units with majority labels.
 The first representation used the raw numeric inputs with the one-hot encoding.
 The second representation standardised the numeric inputs.
-The third representation applied the natural logarithm of one plus the value to every numeric input with an absolute skewness above two and no negative value, followed by standardisation.
+The third representation applied the natural logarithm of one plus the value to every non-negative numeric input with an absolute skewness above two.
+Standardisation followed the logarithm.
+The threshold of two matches the threshold of Assignment 2, where 32 of the 39 numeric inputs exceeded the threshold.
 The representation with the highest validation macro F-measure was selected.
 On each generalisation fold, the skewed inputs and the standardisation statistics were recomputed from the training rows of that fold.
 The tree always received the raw encoding, and the nearest-neighbour classifier always received the logarithm with standardisation, as in Assignment 2.
 
 \emph{Lattice size:}
-Square lattices with sides of 8, 12, 16, 20, 24, 28, 32, 36 and 40 units were trained with the seed 20261019 and scored with majority labels.
+Square lattices with sides from eight to 40 units, in steps of four, were trained with the seed 20261019 and scored with majority labels.
+The number of units therefore grew from 64 to 1\,600.
+The largest lattice holds one unit for roughly every 70 training patterns, so every lattice still summarises the data.
 The smallest lattice within 0.01 of the best validation macro F-measure was selected.
+The band favours the smaller and faster lattice when a larger lattice improves the score by less than 0.01.
 The values of $Q$ and $T$ were recorded but did not enter the selection.
 Two further seeds, 20261020 and 20261021, were trained at the selected size.
 The range of the three scores served as the initialisation noise in later stages.
@@ -389,20 +428,27 @@ Growth was triggered only when the selected size was the largest size in the swe
 
 \emph{Training settings:}
 The settings $\eta(0)$, $E$ and the convergence width were varied one at a time at the selected size.
-The learning rate took the values 0.1 and 0.9, the ordering epochs took the values four and 16, and the convergence width took the values 0.5 and two.
+The number of ordering epochs and the convergence width were halved and doubled, giving four and 16 epochs and widths of 0.5 and two.
+The learning rate took the values 0.1 and 0.9, on either side of the default and below the limit of one that \eqref{eq:update} requires.
 An alternative replaced the default only when the alternative exceeded the default by more than the initialisation noise.
 
 \emph{Labelling rule:}
 The three labelling rules were scored on the selected map.
-The cluster rule was evaluated at 4, 6, 8, 10, 12, 16, 20, 30, 50, 100 and 200 clusters.
-The value of 10 was included because the data set has 10 categories.
+The cluster rule was evaluated at the cluster counts in the set $\{4,6,8,10,12,16,20,30,50,100,200\}$.
+The counts ranged from four, below the number of categories, to 200, close to the number of occupied units.
+The counts were densest near 10, where a structure of one region per category would appear.
 The rule with the highest validation macro F-measure was selected.
-Ties were broken by balanced accuracy, then in favour of the simpler rule, and then in favour of fewer clusters.
+A tie in the macro F-measure was broken by balanced accuracy.
+A remaining tie favoured the simpler rule, and a tie between cluster counts favoured fewer clusters.
 
 \emph{Class cap:}
 A further SOM was trained when the validation recall of Worms under the best unweighted rule was below 0.2.
+A recall of 0.2 corresponded to five of the 26 Worms rows in the validation portion.
+A lower recall therefore indicated that the map ignored Worms.
 The training of that SOM used at most 2\,000 training patterns from each category.
-The histograms and the evaluation used all rows.
+The cap limited the six categories with more than 2\,000 training patterns.
+The four smallest categories kept every training pattern.
+The histograms still used every training row.
 The cap was adopted only when the cap raised the validation macro F-measure.
 
 \subsection{Generalisation comparison}
@@ -415,10 +461,10 @@ In summary, the selection proceeded in fixed stages on the validation portion, a
 
 \section{Results and discussion}
 \label{sec:results}
-The present section reports the outcome of each selection stage and then the generalisation comparison.
+The present section reports the outcome of each selection stage, followed by the generalisation comparison.
 The stages appear in the order of execution.
-The section first covers the input representation, the lattice size, and the training settings.
-The section then covers the labelling rule and the class cap.
+The first subsections address the input representation, the lattice size, and the training settings.
+The next subsections address the labelling rule and the class cap.
 The generalisation comparison and the limit imposed by label ambiguity close the section.
 
 \subsection{Input representation}
@@ -426,45 +472,23 @@ On a lattice of $16\times16$ units with majority labels, the raw encoding attain
 Standardisation raised the score to 0.2821, and the logarithm followed by standardisation raised the score further to 0.3284.
 The logarithm was therefore selected.
 The quantisation error fell from $2.14\times10^{16}$ under the raw encoding to 6.14 under the selected representation.
-The raw value of $Q$ shows that a handful of inputs with extreme ranges determined every best-matching unit, as the Euclidean argument in the background predicted.
-The gain from the logarithm shows that standardisation alone left the skewed inputs dominated by extreme values.
+The raw value of $Q$ showed that the inputs with the widest ranges determined every best-matching unit, as the Euclidean argument in the background predicted.
+The gain from the logarithm showed that standardisation without the logarithm left the skewed inputs dominated by extreme values.
 The same ordering of the three representations appeared for the nearest-neighbour classifier in Assignment 2.
 
 \subsection{Lattice size}
-Table~\ref{tab:size} and Fig.~\ref{fig:size} report the lattice sweep.
+Fig.~\ref{fig:size} reports the lattice sweep.
 The quantisation error fell steadily from 11.58 at 64 units to 2.84 at 1\,600 units.
 The topographic error stayed between 0.07 and 0.12 at every size, so the larger lattices preserved the neighbourhood structure as well as the smaller lattices.
 The macro F-measure rose from 0.2563 at 64 units to 0.3842 at 576 units.
 Beyond 576 units, the score fluctuated between 0.3760 and 0.3954 without a consistent trend.
-
-\begin{table}[tb]
-\caption{Lattice sweep on the validation portion}
-\label{tab:size}
-\centering
-\footnotesize
-\begin{tabular}{rrccc}
-\toprule
-Side & Units & $Q$ & $T$ & $\bar{F}$ \\
-\midrule
-8 & 64 & 11.58 & 0.080 & 0.2563 \\
-12 & 144 & 8.24 & 0.070 & 0.3028 \\
-16 & 256 & 6.14 & 0.073 & 0.3284 \\
-20 & 400 & 4.90 & 0.093 & 0.3485 \\
-24 & 576 & 4.18 & 0.103 & 0.3842 \\
-28 & 784 & 3.70 & 0.098 & 0.3760 \\
-32 & 1\,024 & 3.36 & 0.113 & 0.3863 \\
-36 & 1\,296 & 3.08 & 0.104 & 0.3806 \\
-40 & 1\,600 & 2.84 & 0.107 & 0.3954 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 \begin{figure*}[tb]
 \centering
 \subfloat[Quantisation error]{\includegraphics{figures/size_qe.pdf}}\hfill
 \subfloat[Topographic error]{\includegraphics{figures/size_te.pdf}}\hfill
 \subfloat[Validation macro F-measure]{\includegraphics{figures/size_f.pdf}}
-\caption{Measures of the trained map against the number of units}
+\caption{Measures of the trained map for each number of units}
 \label{fig:size}
 \end{figure*}
 
@@ -473,14 +497,14 @@ The selection band therefore admitted every lattice with a score of at least 0.3
 The smallest such lattice had 1\,024 units, and the $32\times32$ lattice was selected.
 Three seeds at the selected size scored 0.3863, 0.3825 and 0.3752, a range of 0.0111.
 The fluctuation beyond 576 units spanned 0.0194, less than twice the initialisation noise.
-The sweep therefore reached a plateau at roughly 576 units, and the answer to the first research question is a lattice of between 576 and 1\,024 units.
+The sweep therefore showed a plateau from roughly 576 units, and the answer to the first research question is a lattice of between 576 and 1\,024 units.
 Beyond the plateau, additional units continued to reduce $Q$ without improving the category score.
 The selected size was not the largest size of the sweep, so the growth rule was not triggered.
 
 \subsection{Training settings}
 Table~\ref{tab:sense} reports the one-at-a-time variation of the training settings on the $32\times32$ lattice.
 Both alternative learning rates and both alternative numbers of ordering epochs scored below the default.
-The largest of those losses was 0.0199, at a learning rate of 0.1.
+The largest of those decreases was 0.0199, at a learning rate of 0.1.
 The defaults for $\eta(0)$ and $E$ were therefore retained.
 
 \begin{table}[tb]
@@ -507,16 +531,17 @@ The convergence width had a much larger effect than the other two settings.
 A width of 0.5 raised the validation macro F-measure by 0.0209, nearly twice the initialisation noise, and the width of 0.5 was adopted.
 The narrow width also lowered $Q$ from 3.36 to 2.30 but nearly tripled $T$, from 0.113 to 0.309.
 Conversely, a width of two lowered $T$ to 0.067 and lowered the score to 0.3684.
-A narrow kernel lets each codebook vector settle on the patterns of a single unit, so the map fits the data more closely at the cost of a less ordered lattice.
+A narrow kernel lets each codebook vector move towards the patterns of a single unit, so the map fits the data more closely while the lattice becomes less ordered.
 The category score therefore rewarded local fidelity over topology preservation.
 
 \subsection{Labelling rule}
 Table~\ref{tab:names} reports the validation scores of the three labelling rules on the selected map.
-The inverse-frequency vote attained the highest macro F-measure of 0.4153, against 0.4072 for the majority rule.
+The inverse-frequency vote attained the highest macro F-measure of 0.4153, compared with 0.4072 for the majority rule.
 The vote was therefore selected.
 The gap of 0.0081 lay inside the initialisation noise.
-However, the vote raised the balanced accuracy from 0.3886 to 0.5679 and the recall of Worms from zero to 0.692, so the secondary measures favoured the same choice.
-The validation portion contains 26 rows of Worms, and a recall of 0.692 corresponded to 18 of those rows.
+However, the vote raised the balanced accuracy from 0.3886 to 0.5679 and the recall of Worms from zero to 0.692.
+The secondary measures therefore favoured the same choice.
+The validation portion contained 26 rows of Worms, and a recall of 0.692 corresponded to 18 of those rows.
 
 \begin{table}[tb]
 \caption{Validation scores of the labelling rules on the selected map}
@@ -541,15 +566,17 @@ Every clustering scored below both unit-level rules.
 The score of the cluster rule rose almost monotonically, from 0.0690 at four clusters to 0.3485 at 200 clusters.
 The cut at 10 clusters, one cluster per category, scored only 0.2066.
 When every occupied unit forms a cluster of one unit, the cluster rule coincides with the majority rule, with a score of 0.4072.
-The steady rise shows that every merge discarded category information, and no number of clusters below the number of occupied units was optimal.
+The steady rise showed that every merge discarded category information, and no number of clusters below the number of occupied units was optimal.
 The answer to the second research question is therefore negative.
 Clustering of the codebook did not improve on the majority category of each unit.
 
 Fig.~\ref{fig:map} explains the negative result.
-The majority categories in Fig.~\ref{fig:map}(a) form one compact region for Generic, but Normal, Exploits and Fuzzers each occupy several separate regions.
-The unified distance matrix in Fig.~\ref{fig:map}(b) shows a few ridges of large distance, while large areas of the map show small and uniform distances.
-A merge that respects the distances therefore joins neighbouring units of different categories, and the minority category of the merged region loses the label.
-The categories of the data set therefore did not form single connected regions of the input space, contrary to the assumption behind a cut at 10 clusters.
+The majority categories in Fig.~\ref{fig:map}(a) form one compact region for Generic, but Normal, Exploits and Fuzzers each occupy more than one region.
+The unified distance matrix in Fig.~\ref{fig:map}(b) shows narrow ridges of large distance.
+Only 13.9 per cent of the units had a mean neighbour distance above twice the median, and the remainder of the map showed small and uniform distances.
+A merge that respects the distances therefore joins neighbouring units of different categories.
+As a result, the minority category of the merged region loses the label.
+The categories of the data set thus did not form single connected regions of the input space, contrary to the assumption behind a cut at 10 clusters.
 
 \begin{figure*}[tb]
 \centering
@@ -561,7 +588,7 @@ The categories of the data set therefore did not form single connected regions o
 
 \subsection{Class cap}
 The majority rule left the recall of Worms at zero, below the threshold of 0.2, so the capped map was trained.
-The capped map attained a validation macro F-measure of 0.4170 under the inverse-frequency vote, against 0.4153 without the cap.
+The capped map attained a validation macro F-measure of 0.4170 under the inverse-frequency vote, compared with 0.4153 without the cap.
 Under the rule declared in advance, the cap was adopted.
 However, the gain of 0.0017 was about one sixth of the initialisation noise, so the evidence did not show that the cap improved the macro F-measure.
 The cap did raise the validation recall of Worms from 0.692 to 0.808.
@@ -572,7 +599,7 @@ Normal held the majority on 271 units, or 26.5 per cent of the units, although N
 Exploits held the majority on 274 units and Fuzzers on 153 units.
 Backdoor, Analysis and Shellcode held the majority on eight, 12 and 13 units respectively.
 Worms held the majority on no unit, and the 120 training rows of Worms fell on 63 different units.
-Because Worms owns no unit, every correct Worms prediction came from the weighted vote rather than from a unit label.
+Every correct Worms prediction therefore came from the weighted vote rather than from a unit label.
 
 Fig.~\ref{fig:qe} shows the training trace of the selected map.
 The ordering phase reduced $Q$ on the capped draw from 22.83 to 3.83.
@@ -611,25 +638,6 @@ Neighbours, weighted & 0.4610 & 0.0032 & 0.5545 & 0.7131 \\
 \end{tabular}
 \end{table}
 
-The reimplemented reference classifiers reproduced the results of Assignment 2.
-Assignment 2 reported a macro F-measure of 0.5760 for the tree and 0.4554 for the uniform vote, both obtained with the scikit-learn library.
-The departures of 0.0012 and 0.0029 lay inside the fold standard deviations reported in both studies.
-
-The SOM ranked differently under each measure.
-Under the macro F-measure, the SOM ranked last.
-Under balanced accuracy, the SOM attained 0.5680 and ranked second, ahead of both nearest-neighbour votes.
-Under accuracy, the SOM ranked last with 0.6306.
-The low accuracy arose because the SOM labelled 17\,123 Normal rows as Fuzzers, a loss of 20.0 per cent of the Normal rows.
-The disagreement between the measures followed mainly from a trade between recall and precision on the rare categories.
-
-Fig.~\ref{fig:recall} shows the per-category recall of every model.
-The SOM recalled Worms at 0.737, close to the 0.789 of the tree and well above the 0.088 of the uniform vote.
-The SOM also recalled Shellcode at 0.683, Analysis at 0.540 and Backdoor at 0.360, in each case far above the uniform vote.
-The precision told a different story.
-The SOM predicted Worms for 8\,839 rows, and only 126 of those rows were Worms.
-The precision for Worms was therefore 0.014, and the F-measure for Worms was 0.028.
-By contrast, the tree predicted Worms for 274 rows with 135 correct predictions and attained an F-measure of 0.607 on Worms.
-
 \begin{figure*}[tb]
 \centering
 \includegraphics{figures/recall.pdf}
@@ -637,21 +645,42 @@ By contrast, the tree predicted Worms for 274 rows with 135 correct predictions 
 \label{fig:recall}
 \end{figure*}
 
-The weight in \eqref{eq:weight} accounted for the loss of precision.
-The ratio of the weight of Worms to the weight of Normal equalled the inverse ratio of the training counts, roughly 500.
-A single Worms pattern on a unit inside the neighbourhood therefore outweighed about 500 Normal patterns.
-The 120 Worms training rows fell on 63 units spread across the lattice, so a large share of queries found a Worms count in the neighbourhood.
-Fig.~\ref{fig:cm} confirms the effect.
-The SOM labelled 17.5 per cent of the Reconnaissance rows and 16.3 per cent of the Exploits rows as Worms.
-The tree avoided the effect because the tree applies the weight inside the impurity of a split.
-The split then isolates a region that contains Worms rather than raising Worms everywhere that a Worms row lies nearby.
+The reimplemented reference classifiers reproduced the results of Assignment 2.
+Assignment 2 reported a macro F-measure of 0.5760 for the tree and 0.4554 for the uniform vote, both obtained with the scikit-learn library \cite{pedregosa2011}.
+The departures of 0.0012 and 0.0029 lay inside the fold standard deviations reported in both studies.
 
-\begin{figure}[tb]
+The SOM ranked differently under each measure.
+Under the macro F-measure, the SOM ranked last.
+Under balanced accuracy, the SOM attained 0.5680 and ranked second, ahead of both nearest-neighbour votes.
+Under accuracy, the SOM ranked last with 0.6306.
+The low accuracy arose because the SOM labelled 17\,123 Normal rows as Fuzzers.
+Those rows formed 20.0 per cent of the Normal rows.
+The disagreement between the measures followed mainly from a trade-off between recall and precision on the rare categories.
+
+Fig.~\ref{fig:recall} shows the per-category recall of every model.
+The SOM recalled Worms at 0.737, close to the 0.789 of the tree and far above the 0.088 of the uniform vote.
+The SOM also recalled Shellcode at 0.683, Analysis at 0.540 and Backdoor at 0.360, in each case far above the uniform vote.
+However, the precision for Worms was low.
+The SOM predicted Worms for 8\,839 rows, and only 126 of those rows were Worms.
+The precision for Worms was therefore 0.014, and the F-measure for Worms was 0.028.
+By contrast, the tree predicted Worms for 274 rows with 135 correct predictions and attained an F-measure of 0.607 on Worms.
+
+\begin{figure*}[tb]
 \centering
 \includegraphics{figures/confusion.pdf}
 \caption{Row-normalised confusion matrix of the selected map on the pooled folds}
 \label{fig:cm}
-\end{figure}
+\end{figure*}
+
+The weight in \eqref{eq:weight} explained the low precision.
+The ratio of the weight of Worms to the weight of Normal equalled the inverse ratio of the training counts, roughly 500.
+One Worms pattern on a unit inside the neighbourhood therefore outweighed about 500 Normal patterns.
+The 120 Worms training rows fell on 63 units spread across the lattice.
+As a result, 212 of the 1\,024 units had a Worms count within three widths, and 17.4 per cent of the validation queries reached such a unit.
+Fig.~\ref{fig:cm} confirms the effect.
+The SOM labelled 17.5 per cent of the Reconnaissance rows and 16.3 per cent of the Exploits rows as Worms.
+The tree avoided the effect because the tree applies the weight inside the impurity of a split.
+The split instead isolates a region that contains Worms, without favouring Worms wherever a Worms row lies nearby.
 
 Fig.~\ref{fig:cm} also shows a symmetric confusion between Backdoor and Analysis.
 The SOM labelled 46.0 per cent of the Backdoor rows as Analysis and 40.8 per cent of the Analysis rows as Backdoor.
@@ -659,21 +688,22 @@ Assignment 2 reported the same pair as the main source of error of the tree, at 
 The two categories therefore overlapped in the input space itself, and the confusion was not specific to the SOM.
 
 The gap between the SOM and the uniform nearest-neighbour vote was consistent with the compression of the training data.
-The nearest-neighbour vote consults the original training rows, while the SOM consults 1\,024 codebook vectors.
-In the SOM, no codebook vector represents Worms, so the label of Worms survives only through the histograms and the vote weight.
-The evidence supports the compression as a likely contributor to the gap, although the study did not isolate the compression from the other differences between the two models.
-The answer to the fourth research question is that the SOM trailed both references under the macro F-measure but recovered the rare categories better than the uniform vote.
+The nearest-neighbour vote uses the original training rows, while the SOM uses 1\,024 codebook vectors.
+In the SOM, no codebook vector represents Worms, so the label of Worms remains available only through the histograms and the vote weight.
+The evidence supports the compression as a likely contributor to the gap.
+However, the study did not isolate the compression from the other differences between the two models.
+The answer to the fourth research question is that the SOM scored below both references under the macro F-measure but detected the rare categories better than the uniform vote.
 
 \subsection{Limit imposed by label ambiguity}
 The deduplicated table contained 153\,684 distinct input vectors.
 Of those vectors, 2\,445 carried more than one category.
 A total of 11\,506 rows lay on such a vector, a share of 7.07 per cent.
 Assignment of the majority category of each vector to every copy yielded an accuracy of 0.9443.
-All reported accuracies lay well below the bound, so the bound did not explain the gap between the models.
+All reported accuracies lay at least 0.17 below the bound, so the bound did not explain the gap between the models.
 The gap therefore reflected the models rather than the data.
 
 In summary, the selection produced a $32\times32$ map with a narrow convergence width, the inverse-frequency vote and the class cap.
-The map recovered the rare categories at the cost of precision, and the tree remained the strongest model under the macro F-measure.
+The map detected the rare categories with low precision, and the tree remained the best model under the macro F-measure.
 
 \section{Conclusions}
 \label{sec:conclusions}
@@ -686,31 +716,31 @@ The Euclidean fit of the SOM required both the logarithm and standardisation.
 Together, the two transforms raised the validation macro F-measure from 0.1688 to 0.3284.
 
 The second finding concerned the size and the training of the map.
-The validation macro F-measure reached a plateau at roughly 576 units, while the quantisation error kept falling.
+The validation macro F-measure showed a plateau from roughly 576 units, while the quantisation error continued to decrease.
 The quantisation error therefore did not identify the useful size of the map.
-The convergence width was the only training setting that mattered.
-A narrow width improved the macro F-measure at the cost of a threefold rise in the topographic error.
+The convergence width was the only training setting with an effect larger than the initialisation noise.
+A narrow width improved the macro F-measure but nearly tripled the topographic error.
 
 The third finding concerned the labelling of the map.
 Clustering of the codebook by the method of Ward lowered the macro F-measure at every number of clusters.
-The categories of the data set occupied several separate regions of the map, so every merge discarded category information.
+Each of the three largest categories occupied more than one region of the map, so every merge discarded category information.
 The inverse-frequency vote matched the majority rule on the macro F-measure and raised the balanced accuracy from 0.3886 to 0.5679.
 
 The fourth finding concerned the rare categories.
 The vote raised the recall of Worms to 0.737 on the five folds.
-However, the vote predicted Worms for 8\,839 rows to find 126 Worms rows.
-The gain in recall therefore came almost entirely at the expense of precision.
+However, the vote predicted Worms for 8\,839 rows, and only 126 of those rows were Worms.
+The gain in recall therefore came with a very low precision.
 A cap on the number of training patterns per category changed the macro F-measure by less than the initialisation noise.
 
 The fifth finding concerned the comparison.
-The SOM attained a five-fold macro F-measure of 0.4135, against 0.4525 for the uniform nearest-neighbour vote and 0.5772 for the tree.
-The class-weighted tree remained the strongest model.
+The SOM attained a five-fold macro F-measure of 0.4135, compared with 0.4525 for the uniform nearest-neighbour vote and 0.5772 for the tree.
+The class-weighted tree remained the best model under the macro F-measure.
 
 Three directions extend the study.
-A milder vote weight, such as the square root of $\alpha_c$, would test whether a compromise between the uniform and the inverse-frequency vote recovers precision on the rare categories.
+A milder vote weight, such as the square root of $\alpha_c$, would lie between the uniform and the inverse-frequency vote.
+The milder weight would test whether precision on the rare categories improves.
 A hierarchical SOM, as used by Kayacik \emph{et al.}, would allow a second map to separate the rare categories within the units that the first map assigns to the frequent categories.
-Finally, training several maps on bootstrap samples would show whether an ensemble reduces the sensitivity of the map to the initialisation.
-
+Finally, training ten maps on bootstrap samples would show whether an ensemble reduces the sensitivity of the map to the initialisation.
 
 \raggedbottom
 \appendices
@@ -773,7 +803,6 @@ $\bar{\mathbf{z}}_v$ & Mean input vector of the patterns won by unit $v$ \\
 \end{tabular}
 \end{table}
 
-
 \begin{thebibliography}{99}
 \bibitem{breiman1984}
 L.~Breiman, J.~H. Friedman, R.~A. Olshen, and C.~J. Stone, \emph{Classification and Regression Trees}. Belmont, CA: Wadsworth, 1984.
@@ -786,6 +815,9 @@ T.~M. Cover and P.~E. Hart, ``Nearest neighbor pattern classification,'' \emph{I
 
 \bibitem{engelbrecht2007}
 A.~P. Engelbrecht, \emph{Computational Intelligence: An Introduction}, 2nd~ed. Chichester: Wiley, 2007.
+
+\bibitem{harris2020}
+C.~R. Harris, K.~J. Millman, S.~J. van~der Walt, R.~Gommers, P.~Virtanen, D.~Cournapeau, E.~Wieser, J.~Taylor, S.~Berg, N.~J. Smith, R.~Kern, M.~Picus, S.~Hoyer, M.~H. van~Kerkwijk, M.~Brett, A.~Haldane, J.~Fern\'andez del R\'io, M.~Wiebe, P.~Peterson, P.~G\'erard-Marchant, K.~Sheppard, T.~Reddy, W.~Weckesser, H.~Abbasi, C.~Gohlke, and T.~E. Oliphant, ``Array programming with NumPy,'' \emph{Nature}, vol.~585, no.~7825, pp.~357--362, 2020.
 
 \bibitem{hastie2009}
 T.~Hastie, R.~Tibshirani, and J.~Friedman, \emph{The Elements of Statistical Learning}, 2nd~ed. New York: Springer, 2009.
@@ -808,11 +840,17 @@ T.~Kohonen, ``The self-organizing map,'' \emph{Proceedings of the IEEE}, vol.~78
 \bibitem{kohonen2001}
 T.~Kohonen, \emph{Self-Organizing Maps}, 3rd~ed. Berlin: Springer, 2001.
 
+\bibitem{lam2015}
+S.~K. Lam, A.~Pitrou, and S.~Seibert, ``Numba: A LLVM-based Python JIT compiler,'' in \emph{Proceedings of the Second Workshop on the LLVM Compiler Infrastructure in HPC}, Austin, TX, 2015, pp.~1--6.
+
 \bibitem{moustafa2015}
 N.~Moustafa and J.~Slay, ``UNSW-NB15: A comprehensive data set for network intrusion detection systems,'' in \emph{Proceedings of the Military Communications and Information Systems Conference}, Canberra, Australia, 2015, pp.~1--6.
 
 \bibitem{moustafa2016}
 N.~Moustafa and J.~Slay, ``The evaluation of network anomaly detection systems: Statistical analysis of the UNSW-NB15 data set and the comparison with the KDD99 data set,'' \emph{Information Security Journal: A Global Perspective}, vol.~25, no.~1--3, pp.~18--31, 2016.
+
+\bibitem{pedregosa2011}
+F.~Pedregosa, G.~Varoquaux, A.~Gramfort, V.~Michel, B.~Thirion, O.~Grisel, M.~Blondel, P.~Prettenhofer, R.~Weiss, V.~Dubourg, J.~Vanderplas, A.~Passos, D.~Cournapeau, M.~Brucher, M.~Perrot, and E.~Duchesnay, ``Scikit-learn: Machine learning in Python,'' \emph{Journal of Machine Learning Research}, vol.~12, pp.~2825--2830, 2011.
 
 \bibitem{ramadas2003}
 M.~Ramadas, S.~Ostermann, and B.~Tjaden, ``Detecting anomalous network traffic with self-organizing maps,'' in \emph{Proceedings of the International Symposium on Recent Advances in Intrusion Detection}, Pittsburgh, PA, 2003, pp.~36--54.

@@ -171,11 +171,15 @@ def confusion_map():
     row = table.sum(axis=1, keepdims=True)
     row[row == 0] = 1
     rate = table / row
-    fig, ax = _figure(COLUMN, 3.4)
-    image = ax.imshow(rate, vmin=0, vmax=1, cmap="Greys")
+    fig, ax = _figure(TEXT, 3.8)
+    image = ax.imshow(rate, vmin=0, vmax=1, cmap="Greys", aspect="auto")
+    for i in range(N_CLASSES):
+        for j in range(N_CLASSES):
+            ax.text(j, i, f"{rate[i, j]:.2f}", ha="center", va="center",
+                    color="white" if rate[i, j] > 0.5 else "black")
     ax.set_xticks(range(N_CLASSES))
     ax.set_yticks(range(N_CLASSES))
-    ax.set_xticklabels(CATEGORIES, rotation=90)
+    ax.set_xticklabels(CATEGORIES, rotation=45, ha="right")
     ax.set_yticklabels(CATEGORIES)
     ax.set_xlabel("Predicted category")
     ax.set_ylabel("Actual category")
