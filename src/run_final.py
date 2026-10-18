@@ -43,13 +43,22 @@ def load_frame():
 
 def fit_map(x_update, lock, seed):
     rng = np.random.default_rng(seed)
+    params = lock["params"]
     if lock["grown"]:
-        model = train_map(x_update, 24, 24, rng, log=log)
+        start_rows, start_cols = lock["growth_start"]
+        model = train_map(x_update, start_rows, start_cols, rng, log=log, **params)
         for step in range(int(lock["growth_steps"])):
             model = grow_once(model, x_update)
-            model = continue_training(model, x_update, np.random.default_rng(seed + 30 + step), log=log)
+            model = continue_training(
+                model,
+                x_update,
+                np.random.default_rng(seed + 30 + step),
+                eta0=params["eta0"],
+                sigma_conv=params["sigma_conv"],
+                log=log,
+            )
         return model
-    return train_map(x_update, int(lock["rows"]), int(lock["cols"]), rng, log=log)
+    return train_map(x_update, int(lock["rows"]), int(lock["cols"]), rng, log=log, **params)
 
 
 def predict_locked(model, x_train, y_train, x_test, rule, clusters):
@@ -113,6 +122,7 @@ def main():
             pooled[name] = blob[name]
 
     rows = done_frame.to_dict("records") if len(done_frame) else []
+    fold_stops = []
     for fold, test_idx in enumerate(folds):
         if fold in done:
             log(f"fold {fold} already stored")
@@ -134,7 +144,9 @@ def main():
             x_update = x_som[local]
         else:
             x_update = x_som
+        # Each fold draws its initial codebook under its own seed, SEED + fold.
         model = fit_map(x_update, lock, SEED + fold)
+        fold_stops.append(model["stopped"])
         pred = predict_locked(model, x_som, y_train, x_test_som, lock["rule"], int(lock["clusters"]))
         pooled["som"] += confusion(y_test, pred, N_CLASSES)
         record("som", fold, y_test, pred, rows)
@@ -187,6 +199,7 @@ def main():
     pd.DataFrame(per_class).to_csv(RESULTS / "per_class.csv", index=False)
     amb = ambiguity(features, y)
     (RESULTS / "ambiguity.json").write_text(json.dumps(amb, indent=2))
+    log(f"batch stopping rule per fold {fold_stops}")
     log(f"summary {json.dumps(summary)}")
     log(f"ambiguity {json.dumps(amb)}")
 

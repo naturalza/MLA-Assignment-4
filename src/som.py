@@ -108,24 +108,26 @@ def _sigma0(rows, cols):
     return 0.5 * max(rows, cols)
 
 
-def train_map(x, rows, cols, rng, order_epochs=ORDER_EPOCHS, batch_epochs=BATCH_EPOCHS, log=None):
+def train_map(
+    x, rows, cols, rng, order_epochs=ORDER_EPOCHS, batch_epochs=BATCH_EPOCHS, eta0=ETA0, sigma_conv=SIGMA_CONV, log=None
+):
     weights = _init_weights(x, rows * cols, rng)
     coords = grid_coords(rows, cols)
     sigma0 = _sigma0(rows, cols)
-    # After order_epochs decays, the width equals one whenever sigma0 > 1.
+    # The width reaches one at epoch order_epochs, which is the first convergence epoch.
     tau = order_epochs / math.log(sigma0) if sigma0 > 1.0 else order_epochs
     history = []
     x = np.ascontiguousarray(x, dtype=np.float64)
     for epoch in range(order_epochs):
         sigma = sigma0 * math.exp(-epoch / tau)
-        eta = ETA0 * math.exp(-epoch / tau)
+        eta = eta0 * math.exp(-epoch / tau)
         order = rng.permutation(x.shape[0]).astype(np.int64)
         _ordering_epoch(x, weights, coords, sigma, eta, order)
         error = quantisation_error(x, weights)
         history.append(("order", epoch, error, sigma))
         if log is not None:
             log(f"order epoch {epoch} quantisation {error:.6f} width {sigma:.4f}")
-    sigma = SIGMA_CONV
+    sigma = sigma_conv
     stale = 0
     previous = history[-1][2] if history else quantisation_error(x, weights)
     for epoch in range(batch_epochs):
@@ -146,6 +148,7 @@ def train_map(x, rows, cols, rng, order_epochs=ORDER_EPOCHS, batch_epochs=BATCH_
         "cols": cols,
         "sigma": sigma,
         "history": history,
+        "stopped": "tolerance" if stale >= QE_PATIENCE else "cap",
     }
 
 
@@ -250,7 +253,9 @@ def grow_once(model, x, gamma=GROW_GAMMA):
     return model
 
 
-def continue_training(model, x, rng, order_epochs=3, batch_epochs=BATCH_EPOCHS, log=None):
+def continue_training(
+    model, x, rng, order_epochs=3, batch_epochs=BATCH_EPOCHS, eta0=ETA0, sigma_conv=SIGMA_CONV, log=None
+):
     """Short ordering pass on a grown map, then the same batch convergence."""
     weights = np.ascontiguousarray(model["weights"])
     coords = model["coords"]
@@ -260,7 +265,7 @@ def continue_training(model, x, rng, order_epochs=3, batch_epochs=BATCH_EPOCHS, 
     x = np.ascontiguousarray(x, dtype=np.float64)
     for epoch in range(order_epochs):
         sigma = sigma0 * math.exp(-epoch / tau)
-        eta = ETA0 * math.exp(-epoch / tau)
+        eta = eta0 * math.exp(-epoch / tau)
         order = rng.permutation(x.shape[0]).astype(np.int64)
         _ordering_epoch(x, weights, coords, sigma, eta, order)
         error = quantisation_error(x, weights)
@@ -270,9 +275,9 @@ def continue_training(model, x, rng, order_epochs=3, batch_epochs=BATCH_EPOCHS, 
     previous = history[-1][2]
     stale = 0
     for epoch in range(batch_epochs):
-        weights = _batch_step(x, weights, coords, SIGMA_CONV)
+        weights = _batch_step(x, weights, coords, sigma_conv)
         error = quantisation_error(x, weights)
-        history.append(("grow-batch", epoch, error, SIGMA_CONV))
+        history.append(("grow-batch", epoch, error, sigma_conv))
         drop = (previous - error) / previous if previous > 0 else 0.0
         stale = stale + 1 if drop < QE_TOL else 0
         previous = error
@@ -281,5 +286,5 @@ def continue_training(model, x, rng, order_epochs=3, batch_epochs=BATCH_EPOCHS, 
     model = dict(model)
     model["weights"] = weights
     model["history"] = history
-    model["sigma"] = SIGMA_CONV
+    model["sigma"] = sigma_conv
     return model

@@ -5,6 +5,8 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+import json
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,17 +15,25 @@ from matplotlib.colors import ListedColormap
 from src.prep import Pipeline
 from src.protocol import CATEGORIES
 from src.run_tune import load_model
-from src.label import fill_empty, majority_names
+from src.label import majority_names
 from src.score_map import assignment
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 FIG = ROOT / "report" / "figures"
 N_CLASSES = len(CATEGORIES)
+# IEEE two-column widths in inches. Figures are drawn at the printed size, so
+# the 10 pt Computer Modern text matches the body text of the report.
+COLUMN = 3.49
+TEXT = 7.1
 
 plt.rcParams.update(
     {
         "font.family": "serif",
+        "font.serif": ["cmr10"],
+        "mathtext.fontset": "cm",
+        "axes.formatter.use_mathtext": True,
+        "axes.unicode_minus": False,
         "font.size": 10,
         "axes.labelsize": 10,
         "xtick.labelsize": 10,
@@ -37,14 +47,35 @@ plt.rcParams.update(
 
 def _finish(fig, name):
     FIG.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
-    fig.savefig(FIG / name, bbox_inches="tight")
+    fig.savefig(FIG / name)
     plt.close(fig)
+
+
+def _figure(width, height):
+    return plt.subplots(figsize=(width, height), layout="constrained")
+
+
+def _lock():
+    return json.loads((RESULTS / "lock.json").read_text())
+
+
+def _locked_training_view():
+    """Locked codebook, training matrix, and training labels of the tuning split."""
+    lock = _lock()
+    model = load_model(RESULTS / "models" / "locked.npz")
+    frame = pd.read_pickle(ROOT / "data" / "dedup.pkl")
+    y = frame["y"].to_numpy()
+    features = frame.drop(columns=["y"])
+    index = np.load(RESULTS / "tune_indices.npz")
+    skewed = json.loads((RESULTS / "skewed.json").read_text())
+    pipe = Pipeline(lock["transform"], skewed).fit(features, index["train"])
+    x_train = pipe.transform(features, index["train"])
+    return model, x_train, y[index["train"]]
 
 
 def quantisation_curve():
     frame = pd.read_csv(RESULTS / "qe_history.csv")
-    fig, ax = plt.subplots(figsize=(3.4, 2.4))
+    fig, ax = _figure(COLUMN, 2.3)
     order = frame["phase"] == "order"
     batch = frame["phase"] == "batch"
     x_order = np.arange(order.sum())
@@ -60,38 +91,55 @@ def quantisation_curve():
 def size_curve():
     frame = pd.read_csv(RESULTS / "sizes.csv").sort_values("rows")
     units = frame["rows"] * frame["cols"]
-    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.4))
-    axes[0].plot(units, frame["qe"], marker="o", ms=3)
-    axes[0].set_xlabel("Units")
-    axes[0].set_ylabel("Quantisation error")
-    axes[1].plot(units, frame["macro_f"], marker="o", ms=3)
-    axes[1].set_xlabel("Units")
-    axes[1].set_ylabel("Validation macro F")
-    _finish(fig, "size.pdf")
+    panels = (
+        ("qe", "Quantisation error", "size_qe.pdf"),
+        ("te", "Topographic error", "size_te.pdf"),
+        ("macro_f", "Macro F-measure", "size_f.pdf"),
+    )
+    for column, label, name in panels:
+        fig, ax = _figure(TEXT / 3 - 0.05, 2.0)
+        ax.plot(units, frame[column], marker="o", ms=3)
+        ax.set_xlabel("Units")
+        ax.set_ylabel(label)
+        _finish(fig, name)
 
 
 def category_map():
-    model = load_model(RESULTS / "models" / "size_24x24.npz")
-    frame = pd.read_pickle(ROOT / "data" / "dedup.pkl")
-    y = frame["y"].to_numpy()
-    features = frame.drop(columns=["y"])
-    index = np.load(RESULTS / "tune_indices.npz")
-    import json
-
-    skewed = json.loads((RESULTS / "skewed.json").read_text())
-    pipe = Pipeline("log", skewed).fit(features, index["train"])
-    x_train = pipe.transform(features, index["train"])
-    _, _, table, prior = assignment(model, x_train, y[index["train"]], N_CLASSES)
-    labels = fill_empty(majority_names(table, prior), model["coords"]).reshape(model["rows"], model["cols"])
-    colours = plt.get_cmap("tab10")(np.linspace(0, 1, N_CLASSES))
+    """Majority category per unit. A unit that won no training pattern stays white."""
+    model, x_train, y_train = _locked_training_view()
+    _, _, table, prior = assignment(model, x_train, y_train, N_CLASSES)
+    labels = majority_names(table, prior).reshape(model["rows"], model["cols"])
+    colours = np.vstack([[1.0, 1.0, 1.0, 1.0], plt.get_cmap("tab10")(np.arange(N_CLASSES))])
     cmap = ListedColormap(colours)
-    fig, ax = plt.subplots(figsize=(3.5, 3.6))
-    image = ax.imshow(labels, cmap=cmap, vmin=-0.5, vmax=N_CLASSES - 0.5, interpolation="nearest")
+    fig, ax = _figure(TEXT / 2 - 0.1, 3.0)
+    image = ax.imshow(labels + 1, cmap=cmap, vmin=-0.5, vmax=N_CLASSES + 0.5, interpolation="nearest")
     ax.set_xticks([])
     ax.set_yticks([])
-    cbar = fig.colorbar(image, ax=ax, ticks=range(N_CLASSES), fraction=0.046, pad=0.04)
-    cbar.ax.set_yticklabels(CATEGORIES, fontsize=10)
+    cbar = fig.colorbar(image, ax=ax, ticks=range(N_CLASSES + 1), fraction=0.046, pad=0.04)
+    cbar.ax.set_yticklabels(["No pattern"] + list(CATEGORIES))
     _finish(fig, "map.pdf")
+
+
+def unified_distance():
+    """Mean codebook distance from each unit to its orthogonal lattice neighbours."""
+    model = load_model(RESULTS / "models" / "locked.npz")
+    rows, cols = model["rows"], model["cols"]
+    grid = model["weights"].reshape(rows, cols, -1)
+    total = np.zeros((rows, cols))
+    count = np.zeros((rows, cols))
+    for dr, dc in ((0, 1), (1, 0)):
+        gap = np.sqrt(np.sum((grid[: rows - dr, : cols - dc] - grid[dr:, dc:]) ** 2, axis=2))
+        total[: rows - dr, : cols - dc] += gap
+        count[: rows - dr, : cols - dc] += 1
+        total[dr:, dc:] += gap
+        count[dr:, dc:] += 1
+    fig, ax = _figure(TEXT / 2 - 0.1, 3.0)
+    image = ax.imshow(total / count, cmap="Greys", interpolation="nearest")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    cbar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Mean neighbour distance")
+    _finish(fig, "umatrix.pdf")
 
 
 def per_class():
@@ -103,7 +151,7 @@ def per_class():
         "neighbours": "Neighbours",
         "weighted_neighbours": "Weighted neighbours",
     }
-    fig, ax = plt.subplots(figsize=(7.0, 2.6))
+    fig, ax = _figure(TEXT, 2.6)
     x = np.arange(N_CLASSES)
     width = 0.18
     for i, model in enumerate(order):
@@ -123,12 +171,12 @@ def confusion_map():
     row = table.sum(axis=1, keepdims=True)
     row[row == 0] = 1
     rate = table / row
-    fig, ax = plt.subplots(figsize=(3.6, 3.2))
+    fig, ax = _figure(COLUMN, 3.4)
     image = ax.imshow(rate, vmin=0, vmax=1, cmap="Greys")
     ax.set_xticks(range(N_CLASSES))
     ax.set_yticks(range(N_CLASSES))
-    ax.set_xticklabels(range(N_CLASSES))
-    ax.set_yticklabels(range(N_CLASSES))
+    ax.set_xticklabels(CATEGORIES, rotation=90)
+    ax.set_yticklabels(CATEGORIES)
     ax.set_xlabel("Predicted category")
     ax.set_ylabel("Actual category")
     fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
@@ -139,6 +187,7 @@ if __name__ == "__main__":
     quantisation_curve()
     size_curve()
     category_map()
+    unified_distance()
     if (RESULTS / "per_class.csv").exists():
         per_class()
     if (RESULTS / "pooled.npz").exists():

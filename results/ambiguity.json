@@ -1,0 +1,7 @@
+{
+  "distinct_vectors": 153684,
+  "mixed_vectors": 2445,
+  "mixed_rows": 11506,
+  "mixed_fraction": 0.07069956066238595,
+  "majority_accuracy": 0.9443239423638207
+}
